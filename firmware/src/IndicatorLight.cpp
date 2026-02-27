@@ -28,12 +28,14 @@ void indicatorLedTask(void *param)
             {
                 ledcWrite(0, 0);
                 uart2_send((char *)"{8701fe}"); // off
+                Serial.println("LED set to OFF.");
                 break;
             }
             case ON:
             {
                 ledcWrite(0, 255);
                 uart2_send((char *)"{8701ff}"); // on
+                Serial.println("LED set to ON.");
                 break;
             }
             case PULSING:

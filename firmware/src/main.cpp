@@ -66,6 +66,7 @@ void printMemoryStatus(const char* title) {
 =======
 static Preferences g_wifiPrefs;
 static String g_uartInputLine;
+static IndicatorLight *g_indicatorLight = nullptr;
 
 static String trimCopy(const String &in)
 {
@@ -170,9 +171,60 @@ static void processWifiUartCommand(const String &line)
   Serial.println("Unknown command. Type WIFI HELP");
 }
 
+static void processLedUartCommand(const String &line)
+{
+  String command = trimCopy(line);
+  if (command.length() == 0)
+  {
+    return;
+  }
+
+  if (g_indicatorLight == nullptr)
+  {
+    Serial.println("LED controller is not ready.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED HELP"))
+  {
+    Serial.println("UART LED commands:");
+    Serial.println("  LED ON");
+    Serial.println("  LED OFF");
+    Serial.println("  LED PULSE");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED ON"))
+  {
+    g_indicatorLight->setState(ON);
+    Serial.println("LED set to ON.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED OFF"))
+  {
+    g_indicatorLight->setState(OFF);
+    Serial.println("LED set to OFF.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED PULSE"))
+  {
+    g_indicatorLight->setState(PULSING);
+    Serial.println("LED set to PULSING.");
+    return;
+  }
+}
+
 static void handleUartWifiProvisioning(const String &line)
 {
-  processWifiUartCommand(line);
+  String command = trimCopy(line);
+  if (command.startsWith("LED ") || command.equalsIgnoreCase("LED HELP"))
+  {
+    processLedUartCommand(command);
+    return;
+  }
+  processWifiUartCommand(command);
 }
 
 void es8388_init(void)
@@ -256,7 +308,11 @@ void setup() {
   delay(1000);
   Serial.println("Starting up");
   Serial.println("UART WiFi provisioning enabled. Type WIFI HELP and press Enter.");
+<<<<<<< HEAD
 >>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
+=======
+  Serial.println("UART LED control enabled. Type LED HELP and press Enter.");
+>>>>>>> a361bf2 (已依你提供的訓練前處理程式完成對齊調整，且編譯通過。)
 
   Serial.println("ESP32 Exercise 2 - Memory Observation and Allocation");
 
@@ -294,9 +350,42 @@ void setup() {
   // Part 3：配置後再觀察
   printMemoryStatus("=== After Allocation ===");
 
+<<<<<<< HEAD
   // 這段不是作業硬性要求，但可以加分
   freeMemory();
   printMemoryStatus("=== After Free ===");
+=======
+  // start the i2s speaker output
+  I2SOutput *i2s_output = new I2SOutput();
+  i2s_output->start(I2S_NUM_0, i2s_codec_pins, i2sCodecConfig);
+  Speaker *speaker = new Speaker(i2s_output);
+
+  // indicator light to show when we are listening
+  IndicatorLight *indicator_light = new IndicatorLight();
+  g_indicatorLight = indicator_light;
+
+  // and the intent processor
+  IntentProcessor *intent_processor = new IntentProcessor(speaker);
+  /*
+  intent_processor->addDevice("kitchen", GPIO_NUM_5);
+  intent_processor->addDevice("bedroom", GPIO_NUM_21);
+  intent_processor->addDevice("table", GPIO_NUM_23);
+  */
+
+  // create our application
+  Application *application = new Application(i2s_sampler, intent_processor, speaker, indicator_light);
+
+  // set up the i2s sample writer task
+  TaskHandle_t applicationTaskHandle;
+  xTaskCreate(applicationTask, "Application Task", 4096, application, 1, &applicationTaskHandle);
+
+  // start sampling from i2s device - use I2S_NUM_0 as that's the one that supports the internal ADC
+#ifdef USE_I2S_MIC_INPUT
+  i2s_sampler->start(I2S_NUM_0, i2sCodecConfig, applicationTaskHandle);
+#else
+  i2s_sampler->start(I2S_NUM_0, adcI2SConfig, applicationTaskHandle);
+#endif
+>>>>>>> a361bf2 (已依你提供的訓練前處理程式完成對齊調整，且編譯通過。)
 }
 
 <<<<<<< HEAD
