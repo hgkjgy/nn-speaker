@@ -93,6 +93,7 @@ IntentResult IntentProcessor::processIntent(const Intent &intent)
     if (has_close_keyword && has_light_keyword)
     {
         Serial.printf("Turning off the light\n");
+        
         m_speaker->playLightOff();
         return SILENT_SUCCESS;
     }

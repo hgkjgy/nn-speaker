@@ -44,9 +44,13 @@ void indicatorLedTask(void *param)
                 float angle = 0;
                 while (indicator_light->getState() == PULSING)
                 {
-                    ledcWrite(0, 255 * (0.5 * cos(angle) + 0.5));
+                    //ledcWrite(0, 255 * (0.5 * cos(angle) + 0.5));
+                    int brightness = static_cast<int>(0x1f * (0.5 * cos(angle) + 0.5));
                     vTaskDelay(50 / portTICK_PERIOD_MS);
-                    angle += 0.4 * M_PI;
+                    angle += 0.02 * M_PI;
+                    char buf[10];
+                    sprintf(buf, "{8701%02x}", brightness); 
+                    uart2_send(buf);
                 }
             }
             }
