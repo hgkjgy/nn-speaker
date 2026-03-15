@@ -3,6 +3,7 @@
 
 class I2SOutput;
 class WAVFileReader;
+class OpenAITTS;
 
 class Speaker
 {
@@ -16,6 +17,7 @@ private:
     WAVFileReader *m_jokes[5];
 
     I2SOutput *m_i2s_output;
+    OpenAITTS *m_tts;
 
 public:
     Speaker(I2SOutput *i2s_output);
@@ -27,6 +29,14 @@ public:
     void playLightOff();
     void playRandomJoke();
     void playLife();
+
+    /**
+     * Call OpenAI TTS to synthesize the given text and play it through the speaker.
+     * This is a blocking call – it will wait for the API response before returning.
+     * @param text  UTF-8 text to speak.
+     * @return true on success, false on failure.
+     */
+    bool playTTS(const char *text);
 };
 
 #endif

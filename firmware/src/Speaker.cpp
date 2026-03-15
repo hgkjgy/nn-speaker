@@ -1,6 +1,9 @@
 #include "Speaker.h"
 #include "I2SOutput.h"
 #include "WAVFileReader.h"
+#include "OpenAITTS.h"
+#include "TTSBufferSource.h"
+#include "config.h"
 
 Speaker::Speaker(I2SOutput *i2s_output)
 {
@@ -16,6 +19,7 @@ Speaker::Speaker(I2SOutput *i2s_output)
     m_jokes[2] = new WAVFileReader("/joke2.wav");
     m_jokes[3] = new WAVFileReader("/joke3.wav");
     m_jokes[4] = new WAVFileReader("/joke4.wav");
+    m_tts = new OpenAITTS(OPENAI_API_KEY, OPENAI_TTS_MODEL, OPENAI_TTS_VOICE);
 }
 
 Speaker::~Speaker()
@@ -31,6 +35,7 @@ Speaker::~Speaker()
     delete m_jokes[2];
     delete m_jokes[3];
     delete m_jokes[4];
+    delete m_tts;
 }
 
 void Speaker::playOK()
@@ -73,4 +78,18 @@ void Speaker::playLife()
 {
     m_life->reset();
     m_i2s_output->setSampleGenerator(m_life);
+}
+
+bool Speaker::playTTS(const char *text)
+{
+    TTSBufferSource *src = m_tts->synthesize(text);
+    if (!src)
+    {
+        Serial.println("Speaker::playTTS failed – falling back to cantdo");
+        playCantDo();
+        return false;
+    }
+    src->reset();
+    m_i2s_output->setSampleGenerator(src);
+    return true;
 }

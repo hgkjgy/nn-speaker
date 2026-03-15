@@ -25,3 +25,8 @@
 // command recognition settings
 //#define COMMAND_RECOGNITION_ACCESS_KEY "P5QMUSMFV6IRRSTABXFQ7UIXPFRMC4L5"
 #define COMMAND_RECOGNITION_ACCESS_KEY "N6HHFVXOVIZFCLAPEMC7LPDZ4KXONLSJ"
+
+// OpenAI TTS settings
+#define OPENAI_API_KEY "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"
+#define OPENAI_TTS_MODEL "tts-1"
+#define OPENAI_TTS_VOICE "alloy"   // alloy, echo, fable, onyx, nova, shimmer

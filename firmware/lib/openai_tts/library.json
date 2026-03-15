@@ -1,0 +1,5 @@
+{
+  "name": "openai_tts",
+  "version": "1.0.0",
+  "description": "OpenAI TTS client for ESP32 – downloads PCM audio and exposes it as a SampleSource"
+}

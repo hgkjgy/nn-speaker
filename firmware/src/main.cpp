@@ -1,12 +1,10 @@
 #include <Arduino.h>
-<<<<<<< HEAD
-#include "esp_heap_caps.h"
-=======
 #include <WiFi.h>
 #include <Preferences.h>
 #include <driver/i2s.h>
 #include <esp_task_wdt.h>
 #include <esp_heap_caps.h>
+
 #include "I2SMicSampler.h"
 #include "ADCSampler.h"
 #include "I2SOutput.h"
@@ -17,56 +15,15 @@
 #include "Speaker.h"
 #include "IndicatorLight.h"
 #include "AudioKitHAL.h"
->>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
 
-// 指標先宣告成全域，方便配置後還能存取
+// ===== Memory buffers =====
 uint8_t* internal_buf = nullptr;
 uint8_t* dma_buf = nullptr;
 uint8_t* psram_buf = nullptr;
 
-// 印出目前記憶體狀態
-void printMemoryStatus(const char* title) {
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println(title);
-  Serial.println("========================================");
-
-  // 一般 Heap 資訊
-  Serial.printf("Heap total size            : %u bytes\n", ESP.getHeapSize());
-  Serial.printf("Heap free size             : %u bytes\n", ESP.getFreeHeap());
-  Serial.printf("Heap min free size         : %u bytes\n", ESP.getMinFreeHeap());
-  Serial.printf("Heap max alloc size        : %u bytes\n", ESP.getMaxAllocHeap());
-
-  Serial.println();
-
-  // 各種 capability 的剩餘空間
-  Serial.printf("Free MALLOC_CAP_INTERNAL   : %u bytes\n",
-                heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-  Serial.printf("Free MALLOC_CAP_8BIT       : %u bytes\n",
-                heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  Serial.printf("Free MALLOC_CAP_DMA        : %u bytes\n",
-                heap_caps_get_free_size(MALLOC_CAP_DMA));
-  Serial.printf("Free MALLOC_CAP_SPIRAM     : %u bytes\n",
-                heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-
-  Serial.println();
-
-<<<<<<< HEAD
-  // 最大可分配連續區塊，拿來觀察 fragmentation
-  Serial.printf("Largest block INTERNAL     : %u bytes\n",
-                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
-  Serial.printf("Largest block 8BIT         : %u bytes\n",
-                heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-  Serial.printf("Largest block DMA          : %u bytes\n",
-                heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
-  Serial.printf("Largest block SPIRAM       : %u bytes\n",
-                heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
-
-  Serial.println("========================================");
-=======
+// ===== WiFi UART =====
 static Preferences g_wifiPrefs;
 static String g_uartInputLine;
-static IndicatorLight *g_indicatorLight = nullptr;
 
 static String trimCopy(const String &in)
 {
@@ -150,6 +107,7 @@ static void processWifiUartCommand(const String &line)
 
     String ssid = trimCopy(payload.substring(0, sep));
     String password = trimCopy(payload.substring(sep + 1));
+
     if (ssid.length() == 0)
     {
       Serial.println("SSID cannot be empty.");
@@ -171,86 +129,68 @@ static void processWifiUartCommand(const String &line)
   Serial.println("Unknown command. Type WIFI HELP");
 }
 
-static void processLedUartCommand(const String &line)
-{
-  String command = trimCopy(line);
-  if (command.length() == 0)
-  {
-    return;
-  }
-
-  if (g_indicatorLight == nullptr)
-  {
-    Serial.println("LED controller is not ready.");
-    return;
-  }
-
-  if (command.equalsIgnoreCase("LED HELP"))
-  {
-    Serial.println("UART LED commands:");
-    Serial.println("  LED ON");
-    Serial.println("  LED OFF");
-    Serial.println("  LED PULSE");
-    return;
-  }
-
-  if (command.equalsIgnoreCase("LED ON"))
-  {
-    g_indicatorLight->setState(ON);
-    Serial.println("LED set to ON.");
-    return;
-  }
-
-  if (command.equalsIgnoreCase("LED OFF"))
-  {
-    g_indicatorLight->setState(OFF);
-    Serial.println("LED set to OFF.");
-    return;
-  }
-
-  if (command.equalsIgnoreCase("LED PULSE"))
-  {
-    g_indicatorLight->setState(PULSING);
-    Serial.println("LED set to PULSING.");
-    return;
-  }
-}
-
 static void handleUartWifiProvisioning(const String &line)
 {
-  String command = trimCopy(line);
-  if (command.startsWith("LED ") || command.equalsIgnoreCase("LED HELP"))
-  {
-    processLedUartCommand(command);
-    return;
-  }
-  processWifiUartCommand(command);
+  processWifiUartCommand(line);
 }
 
+// ===== Audio init =====
 void es8388_init(void)
 {
-    audiokit::AudioKit kit;
-    auto cfg = kit.defaultConfig(audiokit::KitInputOutput);
-    cfg.sample_rate = AUDIO_HAL_16K_SAMPLES;
-    cfg.i2s_active = false;
-    Serial.println("set AudioKit");
-    kit.begin(cfg);
-    kit.setVolume(100);
->>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
+  audiokit::AudioKit kit;
+  auto cfg = kit.defaultConfig(audiokit::KitInputOutput);
+  cfg.sample_rate = AUDIO_HAL_16K_SAMPLES;
+  cfg.i2s_active = false;
+  Serial.println("set AudioKit");
+  kit.begin(cfg);
+  kit.setVolume(100);
 }
 
-// 配置不同類型記憶體
-void allocateMemory() {
+// ===== Memory observation =====
+void printMemoryStatus(const char* title)
+{
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println(title);
+  Serial.println("========================================");
+
+  Serial.printf("Heap total size            : %u bytes\n", ESP.getHeapSize());
+  Serial.printf("Heap free size             : %u bytes\n", ESP.getFreeHeap());
+  Serial.printf("Heap min free size         : %u bytes\n", ESP.getMinFreeHeap());
+  Serial.printf("Heap max alloc size        : %u bytes\n", ESP.getMaxAllocHeap());
+
+  Serial.println();
+
+  Serial.printf("Free MALLOC_CAP_INTERNAL   : %u bytes\n",
+                heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  Serial.printf("Free MALLOC_CAP_8BIT       : %u bytes\n",
+                heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  Serial.printf("Free MALLOC_CAP_DMA        : %u bytes\n",
+                heap_caps_get_free_size(MALLOC_CAP_DMA));
+  Serial.printf("Free MALLOC_CAP_SPIRAM     : %u bytes\n",
+                heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+  Serial.println();
+
+  Serial.printf("Largest block INTERNAL     : %u bytes\n",
+                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  Serial.printf("Largest block 8BIT         : %u bytes\n",
+                heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  Serial.printf("Largest block DMA          : %u bytes\n",
+                heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+  Serial.printf("Largest block SPIRAM       : %u bytes\n",
+                heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+
+  Serial.println("========================================");
+}
+
+void allocateMemory()
+{
   Serial.println();
   Serial.println("Allocating memory...");
 
-  // Internal SRAM
   internal_buf = (uint8_t*)heap_caps_malloc(16 * 1024, MALLOC_CAP_INTERNAL);
-
-  // DMA memory
   dma_buf = (uint8_t*)heap_caps_malloc(8 * 1024, MALLOC_CAP_DMA);
-
-  // PSRAM
   psram_buf = (uint8_t*)heap_caps_malloc(64 * 1024, MALLOC_CAP_SPIRAM);
 
   if (internal_buf != nullptr) {
@@ -276,8 +216,8 @@ void allocateMemory() {
   }
 }
 
-// 可選：釋放記憶體，再觀察一次
-void freeMemory() {
+void freeMemory()
+{
   Serial.println();
   Serial.println("Freeing memory...");
 
@@ -300,28 +240,14 @@ void freeMemory() {
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-<<<<<<< HEAD
   delay(2000);
-=======
-  delay(1000);
-  Serial.println("Starting up");
-  Serial.println("UART WiFi provisioning enabled. Type WIFI HELP and press Enter.");
-<<<<<<< HEAD
->>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
-=======
-  Serial.println("UART LED control enabled. Type LED HELP and press Enter.");
->>>>>>> a361bf2 (已依你提供的訓練前處理程式完成對齊調整，且編譯通過。)
 
   Serial.println("ESP32 Exercise 2 - Memory Observation and Allocation");
 
-<<<<<<< HEAD
-  // Part 1：配置前
-  printMemoryStatus("=== Before Allocation ===");
-=======
-  // start up wifi
-  // launch WiFi
+  // WiFi startup
   String wifiSsid;
   String wifiPassword;
   loadWifiCredentials(wifiSsid, wifiPassword);
@@ -333,8 +259,9 @@ void setup() {
   {
     Serial.println("Connection Failed! Rebooting...");
     delay(5000);
-    //ESP.restart();
+    // ESP.restart();
   }
+
   Serial.printf("Total heap: %d\n", ESP.getHeapSize());
   Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
   Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
@@ -342,57 +269,14 @@ void setup() {
   Serial.printf("Internal heap free: %u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   Serial.printf("Internal heap largest block: %u\n", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   Serial.printf("Chip model: %s\n", ESP.getChipModel());
->>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
 
-  // Part 2：配置不同記憶體
+  printMemoryStatus("=== Before Allocation ===");
   allocateMemory();
-
-  // Part 3：配置後再觀察
   printMemoryStatus("=== After Allocation ===");
-
-<<<<<<< HEAD
-  // 這段不是作業硬性要求，但可以加分
   freeMemory();
   printMemoryStatus("=== After Free ===");
-=======
-  // start the i2s speaker output
-  I2SOutput *i2s_output = new I2SOutput();
-  i2s_output->start(I2S_NUM_0, i2s_codec_pins, i2sCodecConfig);
-  Speaker *speaker = new Speaker(i2s_output);
-
-  // indicator light to show when we are listening
-  IndicatorLight *indicator_light = new IndicatorLight();
-  g_indicatorLight = indicator_light;
-
-  // and the intent processor
-  IntentProcessor *intent_processor = new IntentProcessor(speaker);
-  /*
-  intent_processor->addDevice("kitchen", GPIO_NUM_5);
-  intent_processor->addDevice("bedroom", GPIO_NUM_21);
-  intent_processor->addDevice("table", GPIO_NUM_23);
-  */
-
-  // create our application
-  Application *application = new Application(i2s_sampler, intent_processor, speaker, indicator_light);
-
-  // set up the i2s sample writer task
-  TaskHandle_t applicationTaskHandle;
-  xTaskCreate(applicationTask, "Application Task", 4096, application, 1, &applicationTaskHandle);
-
-  // start sampling from i2s device - use I2S_NUM_0 as that's the one that supports the internal ADC
-#ifdef USE_I2S_MIC_INPUT
-  i2s_sampler->start(I2S_NUM_0, i2sCodecConfig, applicationTaskHandle);
-#else
-  i2s_sampler->start(I2S_NUM_0, adcI2SConfig, applicationTaskHandle);
-#endif
->>>>>>> a361bf2 (已依你提供的訓練前處理程式完成對齊調整，且編譯通過。)
 }
 
-<<<<<<< HEAD
-void loop() {
-  // 不需要重複執行
-}
-=======
 void loop()
 {
   while (Serial.available() > 0)
@@ -416,4 +300,3 @@ void loop()
 
   vTaskDelay(10);
 }
->>>>>>> 8bd8b83 (feat(firmware): add UART WiFi provisioning with NVS storage)
