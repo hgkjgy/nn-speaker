@@ -15,9 +15,17 @@
 class OpenAILLM
 {
 private:
+    static const uint8_t MAX_STORED_MESSAGES = 12;
+
     const char *m_api_key;
     const char *m_model;          // e.g. "gpt-4o-mini"
     const char *m_system_prompt;  // optional system prompt
+    String m_history_roles[MAX_STORED_MESSAGES];
+    String m_history_contents[MAX_STORED_MESSAGES];
+    uint8_t m_history_count;
+    uint8_t m_max_history_messages;
+
+    void appendHistoryMessage(const char *role, const String &content);
 
 public:
     /**
@@ -35,8 +43,19 @@ public:
     /** Set or change the model. */
     void setModel(const char *model) { m_model = model; }
 
+    /** Clear conversation history (keeps current system prompt). */
+    void clearHistory();
+
     /**
-     * Send a single-turn chat message and return the assistant's reply.
+     * Set max number of history messages kept in memory.
+     * (message unit = one role/content item, not one turn)
+     */
+    void setMaxHistoryMessages(uint8_t max_messages);
+
+    /**
+     * Send a user message and return the assistant's reply.
+     *
+     * Previous turns are included automatically (multi-turn chat).
      *
      * @param user_message  The user's input text (UTF-8).
      * @return The assistant's reply on success, or an empty String on failure.

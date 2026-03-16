@@ -35,15 +35,23 @@ static String jsonEscape(const char *text)
     return escaped;
 }
 
+static String jsonEscape(const String &text)
+{
+    return jsonEscape(text.c_str());
+}
+
 /**
  * Build the JSON request body for the Chat Completions API.
  */
 static String buildRequestBody(const char *model,
                                const char *system_prompt,
+                               const String *history_roles,
+                               const String *history_contents,
+                               uint8_t history_count,
                                const char *user_message)
 {
     String body;
-    body.reserve(256 + strlen(user_message));
+    body.reserve(512 + strlen(user_message));
 
     body += "{\"model\":\"";
     body += model;
@@ -57,7 +65,17 @@ static String buildRequestBody(const char *model,
         body += "\"},";
     }
 
-    // User message
+    // History messages
+    for (uint8_t i = 0; i < history_count; ++i)
+    {
+        body += "{\"role\":\"";
+        body += history_roles[i];
+        body += "\",\"content\":\"";
+        body += jsonEscape(history_contents[i]);
+        body += "\"},";
+    }
+
+    // Current user message
     body += "{\"role\":\"user\",\"content\":\"";
     body += jsonEscape(user_message);
     body += "\"}]}";
@@ -189,7 +207,7 @@ static String readResponseBody(WiFiClientSecure *client, unsigned long timeout_m
                 {
                     if (!client->connected() || millis() - start > timeout_ms)
                         goto done;
-                    delay(1);deserializeJson
+                    delay(1);
                 }
                 body += (char)client->read();
                 start = millis();
@@ -227,8 +245,70 @@ done:
 // --------------------------------------------------------------------
 
 OpenAILLM::OpenAILLM(const char *api_key, const char *model, const char *system_prompt)
-    : m_api_key(api_key), m_model(model), m_system_prompt(system_prompt)
+    : m_api_key(api_key),
+      m_model(model),
+      m_system_prompt(system_prompt),
+      m_history_count(0),
+      m_max_history_messages(MAX_STORED_MESSAGES)
 {
+}
+
+void OpenAILLM::setMaxHistoryMessages(uint8_t max_messages)
+{
+    if (max_messages == 0)
+    {
+        m_max_history_messages = 1;
+    }
+    else if (max_messages > MAX_STORED_MESSAGES)
+    {
+        m_max_history_messages = MAX_STORED_MESSAGES;
+    }
+    else
+    {
+        m_max_history_messages = max_messages;
+    }
+
+    while (m_history_count > m_max_history_messages)
+    {
+        for (uint8_t i = 1; i < m_history_count; ++i)
+        {
+            m_history_roles[i - 1] = m_history_roles[i];
+            m_history_contents[i - 1] = m_history_contents[i];
+        }
+        --m_history_count;
+    }
+}
+
+void OpenAILLM::clearHistory()
+{
+    for (uint8_t i = 0; i < m_history_count; ++i)
+    {
+        m_history_roles[i] = "";
+        m_history_contents[i] = "";
+    }
+    m_history_count = 0;
+}
+
+void OpenAILLM::appendHistoryMessage(const char *role, const String &content)
+{
+    if (!role || role[0] == '\0' || content.length() == 0)
+    {
+        return;
+    }
+
+    if (m_history_count >= m_max_history_messages)
+    {
+        for (uint8_t i = 1; i < m_history_count; ++i)
+        {
+            m_history_roles[i - 1] = m_history_roles[i];
+            m_history_contents[i - 1] = m_history_contents[i];
+        }
+        --m_history_count;
+    }
+
+    m_history_roles[m_history_count] = role;
+    m_history_contents[m_history_count] = content;
+    ++m_history_count;
 }
 
 String OpenAILLM::chat(const char *user_message)
@@ -240,7 +320,13 @@ String OpenAILLM::chat(const char *user_message)
     }
 
     // Build JSON body
-    String requestBody = buildRequestBody(m_model, m_system_prompt, user_message);
+    String requestBody = buildRequestBody(
+        m_model,
+        m_system_prompt,
+        m_history_roles,
+        m_history_contents,
+        m_history_count,
+        user_message);
     Serial.printf("OpenAILLM: request body length = %d\n", requestBody.length());
 
     // Connect via TLS
@@ -320,5 +406,10 @@ String OpenAILLM::chat(const char *user_message)
 
     String result(content);
     Serial.printf("OpenAILLM: reply length = %d\n", result.length());
+
+    // Save successful turn into memory for multi-turn chat.
+    appendHistoryMessage("user", String(user_message));
+    appendHistoryMessage("assistant", result);
+
     return result;
 }
