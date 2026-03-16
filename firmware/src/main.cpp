@@ -15,15 +15,19 @@
 #include "Speaker.h"
 #include "IndicatorLight.h"
 #include "AudioKitHAL.h"
+#include "OpenAILLM.h"
 
 // ===== Memory buffers =====
 uint8_t* internal_buf = nullptr;
 uint8_t* dma_buf = nullptr;
 uint8_t* psram_buf = nullptr;
 
-// ===== WiFi UART =====
+// ===== WiFi / UART =====
 static Preferences g_wifiPrefs;
 static String g_uartInputLine;
+static IndicatorLight *g_indicatorLight = nullptr;
+static Speaker *g_speaker = nullptr;
+static OpenAILLM *g_llm = nullptr;
 
 static String trimCopy(const String &in)
 {
@@ -129,9 +133,197 @@ static void processWifiUartCommand(const String &line)
   Serial.println("Unknown command. Type WIFI HELP");
 }
 
+static void processLedUartCommand(const String &line)
+{
+  String command = trimCopy(line);
+  if (command.length() == 0)
+  {
+    return;
+  }
+
+  if (g_indicatorLight == nullptr)
+  {
+    Serial.println("LED controller is not ready.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED HELP"))
+  {
+    Serial.println("UART LED commands:");
+    Serial.println("  LED ON");
+    Serial.println("  LED OFF");
+    Serial.println("  LED PULSE");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED ON"))
+  {
+    g_indicatorLight->setState(ON);
+    Serial.println("LED set to ON.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED OFF"))
+  {
+    g_indicatorLight->setState(OFF);
+    Serial.println("LED set to OFF.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LED PULSE"))
+  {
+    g_indicatorLight->setState(PULSING);
+    Serial.println("LED set to PULSING.");
+    return;
+  }
+}
+
+static void processTtsUartCommand(const String &line)
+{
+  String command = trimCopy(line);
+  if (command.length() == 0)
+  {
+    return;
+  }
+
+  if (g_speaker == nullptr)
+  {
+    Serial.println("Speaker is not ready.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("TTS HELP"))
+  {
+    Serial.println("UART TTS commands:");
+    Serial.println("  TTS <text>   - synthesize and play the given text via OpenAI TTS");
+    Serial.println("  TTS HELP     - show this help");
+    return;
+  }
+
+  if (command.startsWith("TTS "))
+  {
+    String text = command.substring(strlen("TTS "));
+    text.trim();
+    if (text.length() == 0)
+    {
+      Serial.println("Usage: TTS <text>");
+      return;
+    }
+
+    Serial.printf("TTS: synthesizing \"%s\" ...\n", text.c_str());
+    bool ok = g_speaker->playTTS(text.c_str());
+    if (ok)
+    {
+      Serial.println("TTS: playback started.");
+    }
+    else
+    {
+      Serial.println("TTS: synthesis failed.");
+    }
+    return;
+  }
+}
+
+static void processLlmUartCommand(const String &line)
+{
+  String command = trimCopy(line);
+  if (command.length() == 0)
+  {
+    return;
+  }
+
+  if (g_llm == nullptr)
+  {
+    Serial.println("LLM is not ready.");
+    return;
+  }
+
+  if (command.equalsIgnoreCase("LLM HELP"))
+  {
+    Serial.println("UART LLM commands:");
+    Serial.println("  LLM <text>            - send a message to OpenAI Chat API");
+    Serial.println("  LLM SYSTEM <prompt>   - set the system prompt");
+    Serial.println("  LLM MODEL <name>      - change the model (e.g. gpt-4o)");
+    Serial.println("  LLM HELP              - show this help");
+    return;
+  }
+
+  if (command.startsWith("LLM SYSTEM "))
+  {
+    String prompt = command.substring(strlen("LLM SYSTEM "));
+    prompt.trim();
+    static String systemPromptStorage;
+    systemPromptStorage = prompt;
+    g_llm->setSystemPrompt(systemPromptStorage.c_str());
+    Serial.printf("LLM system prompt set to: %s\n", systemPromptStorage.c_str());
+    return;
+  }
+
+  if (command.startsWith("LLM MODEL "))
+  {
+    String model = command.substring(strlen("LLM MODEL "));
+    model.trim();
+    static String modelStorage;
+    modelStorage = model;
+    g_llm->setModel(modelStorage.c_str());
+    Serial.printf("LLM model changed to: %s\n", modelStorage.c_str());
+    return;
+  }
+
+  if (command.startsWith("LLM "))
+  {
+    String text = command.substring(strlen("LLM "));
+    text.trim();
+    if (text.length() == 0)
+    {
+      Serial.println("Usage: LLM <text>");
+      return;
+    }
+
+    Serial.printf("LLM: sending \"%s\" ...\n", text.c_str());
+    unsigned long startTime = millis();
+    String reply = g_llm->chat(text.c_str());
+    unsigned long elapsed = millis() - startTime;
+
+    if (reply.length() > 0)
+    {
+      Serial.println();
+      Serial.println("--- Assistant ---");
+      Serial.println(reply);
+      Serial.println("-----------------");
+      Serial.printf("(took %lu ms)\n", elapsed);
+    }
+    else
+    {
+      Serial.println("LLM: no reply or error occurred.");
+    }
+    return;
+  }
+}
+
 static void handleUartWifiProvisioning(const String &line)
 {
-  processWifiUartCommand(line);
+  String command = trimCopy(line);
+
+  if (command.startsWith("LLM ") || command.equalsIgnoreCase("LLM HELP"))
+  {
+    processLlmUartCommand(command);
+    return;
+  }
+
+  if (command.startsWith("TTS ") || command.equalsIgnoreCase("TTS HELP"))
+  {
+    processTtsUartCommand(command);
+    return;
+  }
+
+  if (command.startsWith("LED ") || command.equalsIgnoreCase("LED HELP"))
+  {
+    processLedUartCommand(command);
+    return;
+  }
+
+  processWifiUartCommand(command);
 }
 
 // ===== Audio init =====
@@ -243,8 +435,13 @@ void freeMemory()
 void setup()
 {
   Serial.begin(115200);
-  delay(2000);
+  delay(1000);
 
+  Serial.println("Starting up");
+  Serial.println("UART WiFi provisioning enabled. Type WIFI HELP and press Enter.");
+  Serial.println("UART LED control enabled. Type LED HELP and press Enter.");
+  Serial.println("UART TTS enabled. Type TTS HELP and press Enter.");
+  Serial.println("UART LLM enabled. Type LLM HELP and press Enter.");
   Serial.println("ESP32 Exercise 2 - Memory Observation and Allocation");
 
   // WiFi startup
@@ -275,6 +472,49 @@ void setup()
   printMemoryStatus("=== After Allocation ===");
   freeMemory();
   printMemoryStatus("=== After Free ===");
+
+  // startup SPIFFS for the wav files
+  SPIFFS.begin();
+
+  // make sure we don't get killed for our long running tasks
+  esp_task_wdt_init(10, false);
+
+  es8388_init();
+
+#ifdef USE_I2S_MIC_INPUT
+  I2SSampler *i2s_sampler = new I2SMicSampler(i2s_codec_pins, false);
+#else
+  I2SSampler *i2s_sampler = new ADCSampler(ADC_UNIT_1, ADC_MIC_CHANNEL);
+#endif
+
+  I2SOutput *i2s_output = new I2SOutput();
+  i2s_output->start(I2S_NUM_0, i2s_codec_pins, i2sCodecConfig);
+
+  Speaker *speaker = new Speaker(i2s_output);
+  g_speaker = speaker;
+
+  g_llm = new OpenAILLM(OPENAI_API_KEY, "gpt-4o-mini");
+
+  IndicatorLight *indicator_light = new IndicatorLight();
+  g_indicatorLight = indicator_light;
+
+  IntentProcessor *intent_processor = new IntentProcessor(speaker);
+  /*
+  intent_processor->addDevice("kitchen", GPIO_NUM_5);
+  intent_processor->addDevice("bedroom", GPIO_NUM_21);
+  intent_processor->addDevice("table", GPIO_NUM_23);
+  */
+
+  Application *application = new Application(i2s_sampler, intent_processor, speaker, indicator_light);
+
+  TaskHandle_t applicationTaskHandle;
+  xTaskCreate(applicationTask, "Application Task", 4096, application, 1, &applicationTaskHandle);
+
+#ifdef USE_I2S_MIC_INPUT
+  i2s_sampler->start(I2S_NUM_0, i2sCodecConfig, applicationTaskHandle);
+#else
+  i2s_sampler->start(I2S_NUM_0, adcI2SConfig, applicationTaskHandle);
+#endif
 }
 
 void loop()

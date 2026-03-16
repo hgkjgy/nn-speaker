@@ -1,0 +1,47 @@
+#ifndef __openai_llm_h__
+#define __openai_llm_h__
+
+#include <Arduino.h>
+
+/**
+ * Minimal OpenAI Chat Completions client for ESP32.
+ *
+ * Calls POST https://api.openai.com/v1/chat/completions
+ * and returns the assistant's reply as a String.
+ *
+ * Currently supports single-turn conversation only
+ * (one system message + one user message).
+ */
+class OpenAILLM
+{
+private:
+    const char *m_api_key;
+    const char *m_model;          // e.g. "gpt-4o-mini"
+    const char *m_system_prompt;  // optional system prompt
+
+public:
+    /**
+     * @param api_key        Your OpenAI API key (Bearer token).
+     * @param model          Model name, default "gpt-4o-mini".
+     * @param system_prompt  Optional system prompt, default nullptr.
+     */
+    OpenAILLM(const char *api_key,
+              const char *model = "gpt-4o-mini",
+              const char *system_prompt = nullptr);
+
+    /** Set or change the system prompt. */
+    void setSystemPrompt(const char *prompt) { m_system_prompt = prompt; }
+
+    /** Set or change the model. */
+    void setModel(const char *model) { m_model = model; }
+
+    /**
+     * Send a single-turn chat message and return the assistant's reply.
+     *
+     * @param user_message  The user's input text (UTF-8).
+     * @return The assistant's reply on success, or an empty String on failure.
+     */
+    String chat(const char *user_message);
+};
+
+#endif

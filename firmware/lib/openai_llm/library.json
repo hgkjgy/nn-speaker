@@ -1,0 +1,5 @@
+{
+  "name": "openai_llm",
+  "version": "1.0.0",
+  "description": "Minimal OpenAI Chat Completions client for ESP32 – single-turn conversation"
+}
