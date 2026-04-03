@@ -63,6 +63,31 @@ public:
      */
     String chatV2(const char *user_message);
     String chatV1(const char *user_message);
+
+    /**
+     * Tool handler callback type.
+     * Receives the assistant reply. Should return a non-empty feedback
+     * string if a tool call was detected and handled (e.g. "檔案 x.txt 已寫入"),
+     * or an empty String if no tool call was found (= final answer).
+     */
+    typedef String (*ToolHandler)(const String &reply);
+
+    /**
+     * Multi-turn chat with automatic tool-call loop.
+     *
+     * Injects a tool-use system prompt, sends the user message via chatV2,
+     * then checks the reply with toolHandler.  If the handler returns
+     * non-empty feedback the feedback is sent as the next user turn and
+     * the loop repeats – up to maxIterations times.
+     *
+     * @param user_message   The user's input text (UTF-8).
+     * @param toolHandler    Callback that inspects the reply for tool calls.
+     * @param maxIterations  Maximum number of tool-call rounds (default 5).
+     * @return The final assistant reply (the one without a tool call).
+     */
+    String chatV3(const char *user_message,
+                  ToolHandler toolHandler,
+                  uint8_t maxIterations = 5);
 };
 
 #endif

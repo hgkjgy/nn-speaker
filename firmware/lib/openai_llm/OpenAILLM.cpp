@@ -468,3 +468,54 @@ String OpenAILLM::sendChatRequest(const String &request_body)
 
     return result;
 }
+
+String OpenAILLM::chatV3(const char *user_message,
+                         ToolHandler toolHandler,
+                         uint8_t maxIterations)
+{
+    if (!user_message || user_message[0] == '\0')
+    {
+        Serial.println("OpenAILLM::chatV3: empty user message");
+        return String();
+    }
+
+    // Tool-use system prompt
+    static const char *TOOL_PROMPT =
+        "回答問題時，如果要寫入檔案，請先輸出 <tool> 然後在其後加上檔名和要寫入的字串。"
+        "例如 <tool> reply.txt 你好嗎。其它狀況就直接輸出結果就好了";
+
+    // Save original system prompt and inject tool instructions
+    const char *prevPrompt = m_system_prompt;
+    static String combinedPrompt;
+    if (m_system_prompt && m_system_prompt[0] != '\0')
+    {
+        combinedPrompt = String(TOOL_PROMPT) + "\n" + m_system_prompt;
+    }
+    else
+    {
+        combinedPrompt = TOOL_PROMPT;
+    }
+    m_system_prompt = combinedPrompt.c_str();
+
+    // First LLM call
+    String reply = chatV2(user_message);
+
+    // Tool-call loop
+    for (uint8_t iter = 0; iter < maxIterations && reply.length() > 0; ++iter)
+    {
+        String feedback = toolHandler(reply);
+        if (feedback.length() == 0)
+        {
+            // No tool call detected – this is the final answer
+            break;
+        }
+        Serial.printf("OpenAILLM::chatV3: tool feedback \"%s\" (iter %d/%d)\n",
+                       feedback.c_str(), iter + 1, maxIterations);
+        reply = chatV2(feedback.c_str());
+    }
+
+    // Restore original system prompt
+    m_system_prompt = prevPrompt;
+
+    return reply;
+}
