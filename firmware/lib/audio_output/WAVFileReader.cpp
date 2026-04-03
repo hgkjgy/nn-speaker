@@ -1,4 +1,4 @@
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <FS.h>
 #include "WAVFileReader.h"
 
@@ -27,7 +27,7 @@ typedef struct
 
 WAVFileReader::WAVFileReader(const char *file_name, bool repeat)
 {
-    m_file = SPIFFS.open(file_name, "r");
+    m_file = LittleFS.open(file_name, "r");
     // read the WAV header
     wav_header_t wav_header;
     m_file.read((uint8_t *)&wav_header, sizeof(wav_header_t));

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "driver/i2s.h"
 #include <math.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <FS.h>
 
 #include "SampleSource.h"

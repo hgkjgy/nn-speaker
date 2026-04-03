@@ -1,4 +1,5 @@
 #include "OpenAILLM.h"
+#include "SkillRegistry.h"
 
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -269,6 +270,7 @@ OpenAILLM::OpenAILLM(const char *api_key, const char *model, const char *system_
     : m_api_key(api_key),
       m_model(model),
       m_system_prompt(system_prompt),
+      m_skill_registry(nullptr),
       m_history_count(0),
       m_max_history_messages(MAX_STORED_MESSAGES)
 {
@@ -484,17 +486,27 @@ String OpenAILLM::chatV3(const char *user_message,
         "回答問題時，如果要寫入檔案，請先輸出 <tool> 然後在其後加上檔名和要寫入的字串。"
         "例如 <tool> reply.txt 你好嗎。其它狀況就直接輸出結果就好了";
 
-    // Save original system prompt and inject tool instructions
+    // Save original system prompt and inject tool + skill instructions
     const char *prevPrompt = m_system_prompt;
     static String combinedPrompt;
+
+    // Build combined prompt: TOOL_PROMPT + skill system prompt + original prompt
+    combinedPrompt = TOOL_PROMPT;
+
+    if (m_skill_registry)
+    {
+        String skillPrompt = m_skill_registry->generateSystemPrompt();
+        if (skillPrompt.length() > 0)
+        {
+            combinedPrompt += "\n\n" + skillPrompt;
+        }
+    }
+
     if (m_system_prompt && m_system_prompt[0] != '\0')
     {
-        combinedPrompt = String(TOOL_PROMPT) + "\n" + m_system_prompt;
+        combinedPrompt += "\n" + String(m_system_prompt);
     }
-    else
-    {
-        combinedPrompt = TOOL_PROMPT;
-    }
+
     m_system_prompt = combinedPrompt.c_str();
 
     // First LLM call
@@ -503,6 +515,22 @@ String OpenAILLM::chatV3(const char *user_message,
     // Tool-call loop
     for (uint8_t iter = 0; iter < maxIterations && reply.length() > 0; ++iter)
     {
+        // 1) Check for skill commands first
+        if (m_skill_registry)
+        {
+            String skillResult;
+            if (m_skill_registry->parseAndExecute(reply, skillResult))
+            {
+                Serial.printf("OpenAILLM::chatV3: skill result \"%s\" (iter %d/%d)\n",
+                              skillResult.c_str(), iter + 1, maxIterations);
+                // Feed skill result back as user message
+                String feedback = "技能執行結果: " + skillResult;
+                reply = chatV2(feedback.c_str());
+                continue;
+            }
+        }
+
+        // 2) Then check for legacy tool calls
         String feedback = toolHandler(reply);
         if (feedback.length() == 0)
         {

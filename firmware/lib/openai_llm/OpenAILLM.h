@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+class SkillRegistry;
+
 /**
  * Minimal OpenAI Chat Completions client for ESP32.
  *
@@ -20,6 +22,7 @@ private:
     const char *m_api_key;
     const char *m_model;          // e.g. "gpt-4o-mini"
     const char *m_system_prompt;  // optional system prompt
+    SkillRegistry *m_skill_registry; // optional skill registry
     String m_history_roles[MAX_STORED_MESSAGES];
     String m_history_contents[MAX_STORED_MESSAGES];
     uint8_t m_history_count;
@@ -40,6 +43,9 @@ public:
 
     /** Set or change the system prompt. */
     void setSystemPrompt(const char *prompt) { m_system_prompt = prompt; }
+
+    /** Set the skill registry for chatV3 integration. */
+    void setSkillRegistry(SkillRegistry *registry) { m_skill_registry = registry; }
 
     /** Set or change the model. */
     void setModel(const char *model) { m_model = model; }

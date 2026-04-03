@@ -1,7 +1,7 @@
 #ifndef __wav_file_reader_h__
 #define __wav_file_reader_h__
 
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <FS.h>
 #include "SampleSource.h"
 
