@@ -26,6 +26,7 @@ private:
     uint8_t m_max_history_messages;
 
     void appendHistoryMessage(const char *role, const String &content);
+    String sendChatRequest(const String &request_body);
 
 public:
     /**
@@ -60,7 +61,8 @@ public:
      * @param user_message  The user's input text (UTF-8).
      * @return The assistant's reply on success, or an empty String on failure.
      */
-    String chat(const char *user_message);
+    String chatV2(const char *user_message);
+    String chatV1(const char *user_message);
 };
 
 #endif

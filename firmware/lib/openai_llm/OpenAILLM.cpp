@@ -43,7 +43,7 @@ static String jsonEscape(const String &text)
 /**
  * Build the JSON request body for the Chat Completions API.
  */
-static String buildRequestBody(const char *model,
+static String buildRequestBodyV2(const char *model,
                                const char *system_prompt,
                                const String *history_roles,
                                const String *history_contents,
@@ -82,6 +82,27 @@ static String buildRequestBody(const char *model,
 
     return body;
 }
+
+static String buildRequestBodyV1(const char *model,
+                               const char *user_message)
+{
+    String body;
+    body.reserve(512 + strlen(user_message));
+
+    body += "{\"model\":\"";
+    body += model;
+    body += "\",\"messages\":[";
+
+
+    // Current user message
+    body += "{\"role\":\"user\",\"content\":\"";
+    body += jsonEscape(user_message);
+    body += "\"}]}";
+
+    return body;
+}
+
+
 
 /**
  * Wait until data is available on the client or timeout.
@@ -311,7 +332,7 @@ void OpenAILLM::appendHistoryMessage(const char *role, const String &content)
     ++m_history_count;
 }
 
-String OpenAILLM::chat(const char *user_message)
+String OpenAILLM::chatV2(const char *user_message)
 {
     if (!user_message || user_message[0] == '\0')
     {
@@ -319,8 +340,8 @@ String OpenAILLM::chat(const char *user_message)
         return String();
     }
 
-    // Build JSON body
-    String requestBody = buildRequestBody(
+    // Build JSON body (message construction only)
+    String requestBody = buildRequestBodyV2(
         m_model,
         m_system_prompt,
         m_history_roles,
@@ -329,6 +350,43 @@ String OpenAILLM::chat(const char *user_message)
         user_message);
     Serial.printf("OpenAILLM: request body length = %d\n", requestBody.length());
 
+    String result = sendChatRequest(requestBody);
+    if (result.length() == 0)
+    {
+        return String();
+    }
+
+    // Save successful turn into memory for multi-turn chat.
+    appendHistoryMessage("user", String(user_message));
+    appendHistoryMessage("assistant", result);
+
+    return result;
+}
+
+String OpenAILLM::chatV1(const char *user_message)
+{
+    if (!user_message || user_message[0] == '\0')
+    {
+        Serial.println("OpenAILLM: empty user message");
+        return String();
+    }
+
+    // Build JSON body (message construction only)
+    String requestBody = buildRequestBodyV1(m_model, user_message);
+    Serial.printf("OpenAILLM: request body length = %d\n", requestBody.length());
+
+    String result = sendChatRequest(requestBody);
+    if (result.length() == 0)
+    {
+        return String();
+    }
+
+    return result;
+}
+
+
+String OpenAILLM::sendChatRequest(const String &request_body)
+{
     // Connect via TLS
     WiFiClientSecure client;
     client.setInsecure(); // skip certificate verification (simplicity)
@@ -349,10 +407,11 @@ String OpenAILLM::chat(const char *user_message)
     client.printf("Host: %s\r\n", host);
     client.printf("Authorization: Bearer %s\r\n", m_api_key);
     client.printf("Content-Type: application/json\r\n");
-    client.printf("Content-Length: %d\r\n", requestBody.length());
+    client.printf("Content-Length: %d\r\n", request_body.length());
     client.printf("Connection: close\r\n");
     client.printf("\r\n");
-    client.print(requestBody);
+    client.print(request_body);
+    Serial.printf("OpenAILLM: %s\n", request_body.c_str());
 
     // Wait for response
     if (!waitForData(&client, READ_TIMEOUT_MS))
@@ -406,10 +465,6 @@ String OpenAILLM::chat(const char *user_message)
 
     String result(content);
     Serial.printf("OpenAILLM: reply length = %d\n", result.length());
-
-    // Save successful turn into memory for multi-turn chat.
-    appendHistoryMessage("user", String(user_message));
-    appendHistoryMessage("assistant", result);
 
     return result;
 }
