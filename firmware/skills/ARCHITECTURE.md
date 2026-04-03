@@ -1,8 +1,8 @@
 # Skill 系統架構設計
 
-> **版本**: 0.1.0（草案）  
-> **日期**: 2026-04-03  
-> **範疇**: 僅架構設計；不含實作程式碼
+> **版本**: 0.2.0（已實作漸進式載入）
+> **日期**: 2026-04-03
+> **範疇**: 架構設計與韌體端實作記錄（含漸進式載入）
 
 ---
 
@@ -97,10 +97,10 @@ commands:               # 此 skill 可發送的命令清單
 
 ## 3. Skill 載入器模組設計
 
-載入器以 Python 實作，採用 **兩層式載入**（Lazy Loading）策略：
+載入器採用 **兩層式載入**（Lazy Loading）策略，**已在韌體端（C++）實作完成**：
 
-- **摘要層（Summary Layer）**：啟動時掃描所有 skill，僅解析 frontmatter
-- **詳細層（Detail Layer）**：當 skill 被調用時，才載入完整 SKILL.md 內容
+- **摘要層（Summary Layer）** ✅ 已實作：啟動時掃描所有 skill，僅解析 frontmatter（name / description），透過 `SkillRegistry::generateSummaryPrompt()` 產生摘要 system prompt
+- **詳細層（Detail Layer）** ✅ 已實作：當 LLM 透過 `[SKILL_REQUEST:xxx]` 請求某 skill 的詳細資訊時，才透過 `SkillRegistry::generateDetailForSkill()` 按需載入完整 SKILL.md 內容
 
 ### 3.1 模組職責
 
@@ -210,6 +210,34 @@ commands:               # 此 skill 可發送的命令清單
   generate_system_prompt() → str
     - 將所有啟用 skill 的摘要彙整為系統提示詞片段
     - 格式：每個 skill 一段，包含名稱、描述、可用命令
+    - ⚠️ 目前已委派給 generateSummaryPrompt()
+```
+
+#### 韌體端新增方法（✅ 已實作）
+
+以下方法已在 C++ 韌體端實作（見 [`SkillRegistry.h`](../lib/skill_system/SkillRegistry.h) / [`SkillRegistry.cpp`](../lib/skill_system/SkillRegistry.cpp)）：
+
+```
+SkillRegistry::generateSummaryPrompt() → String
+  - 產生只含 name/description 的摘要 prompt
+  - 用於第一階段 LLM 呼叫的 system prompt
+  - generateSystemPrompt() 已改為委派此方法
+
+SkillRegistry::generateDetailForSkill(const String &skillName) → String
+  - 按名稱取得單一 skill 的完整 detail（含 parameters、commands、body）
+  - 用於第二階段 LLM 呼叫時注入對話歷史
+
+SkillRegistry::findSkillByName(const String &skillName) → Skill*
+  - 內部輔助方法，在已註冊 skill 清單中搜尋指定名稱的 skill
+  - 找不到時回傳 nullptr
+```
+
+以下方法已在 [`OpenAILLM.h`](../lib/openai_llm/OpenAILLM.h) / [`OpenAILLM.cpp`](../lib/openai_llm/OpenAILLM.cpp) 實作：
+
+```
+OpenAILLM::parseSkillRequest(const String &reply) → String
+  - 解析 LLM 回覆中的 [SKILL_REQUEST:xxx] 標籤
+  - 回傳 skill 名稱（例如 "led_control"），若無匹配則回傳空字串
 ```
 
 #### `SkillExecutor`
@@ -265,6 +293,72 @@ commands:               # 此 skill 可發送的命令清單
    ├── send_serial("LED on\n", serial_config)
    └── 接收 ESP32 回應 "OK LED on"
 6. 將結果回傳給 LLM 或直接呈現給使用者
+```
+
+### 3.5 漸進式載入流程（✅ 已實作）
+
+韌體端的 `OpenAILLM::chatV3()` 已改為兩階段 LLM 呼叫流程：
+
+#### 階段一：摘要提示 → 決策
+
+1. 呼叫 `SkillRegistry::generateSummaryPrompt()` 取得摘要 system prompt（僅含 name / description）
+2. 將摘要 prompt 與使用者訊息一同送出第一次 API 呼叫
+3. LLM 根據摘要判斷：
+   - 若已能直接選擇 skill 並補齊參數 → 直接輸出 `[SKILL:handler param=val]` → 流程結束
+   - 若需要更多細節 → 輸出 `[SKILL_REQUEST:skill_name]`
+
+#### 階段二（條件式）：Detail 注入 → 命令生成
+
+1. `OpenAILLM::parseSkillRequest()` 偵測 `[SKILL_REQUEST:xxx]` 標籤
+2. 呼叫 `SkillRegistry::generateDetailForSkill(skillName)` 載入完整 skill detail
+3. 將 detail 以 user message 形式注入對話歷史
+4. 發出第二次 API 呼叫
+5. LLM 根據 detail 產生 `[SKILL:handler param=val]` 命令
+6. 回到正常的 `parseAndExecute()` 流程
+
+#### `[SKILL_REQUEST:xxx]` 協議格式
+
+```
+[SKILL_REQUEST:skill_name]
+```
+
+| 項目 | 說明 |
+|------|------|
+| `skill_name` | 必須是摘要清單中已列出的 skill 名稱 |
+| 用途 | LLM 向韌體請求某 skill 的完整 detail |
+| 觸發時機 | 僅在摘要資訊不足以產生具體命令時使用 |
+| 回應方式 | 韌體以 user message 形式回饋 detail，再進行第二輪 LLM 呼叫 |
+
+#### 流程時序圖
+
+```
+  User          Application        SkillRegistry       OpenAI LLM
+   │                │                    │                  │
+   │  語音指令      │                    │                  │
+   │───────────────▶│                    │                  │
+   │                │  generateSummaryPrompt()              │
+   │                │───────────────────▶│                  │
+   │                │  摘要 prompt       │                  │
+   │                │◀───────────────────│                  │
+   │                │                    │                  │
+   │                │  Phase 1: 摘要 + 使用者訊息            │
+   │                │─────────────────────────────────────▶│
+   │                │                    │  [SKILL_REQUEST:led] │
+   │                │◀─────────────────────────────────────│
+   │                │                    │                  │
+   │                │  generateDetailForSkill("led")        │
+   │                │───────────────────▶│                  │
+   │                │  detail 字串       │                  │
+   │                │◀───────────────────│                  │
+   │                │                    │                  │
+   │                │  Phase 2: detail 注入 + 第二次呼叫     │
+   │                │─────────────────────────────────────▶│
+   │                │                    │  [SKILL:led action=on] │
+   │                │◀─────────────────────────────────────│
+   │                │                    │                  │
+   │                │  parseAndExecute()                    │
+   │  結果回覆      │                    │                  │
+   │◀───────────────│                    │                  │
 ```
 
 ---

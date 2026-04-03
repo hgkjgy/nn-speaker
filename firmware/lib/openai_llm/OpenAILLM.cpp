@@ -471,6 +471,37 @@ String OpenAILLM::sendChatRequest(const String &request_body)
     return result;
 }
 
+// --------------------------------------------------------------------
+// parseSkillRequest – extract skill name from [SKILL_REQUEST:xxx]
+// --------------------------------------------------------------------
+
+String OpenAILLM::parseSkillRequest(const String &response)
+{
+    const String TAG_START = "[SKILL_REQUEST:";
+    const String TAG_END   = "]";
+
+    int startIdx = response.indexOf(TAG_START);
+    if (startIdx < 0)
+    {
+        return String();
+    }
+
+    int nameStart = startIdx + TAG_START.length();
+    int endIdx = response.indexOf(TAG_END, nameStart);
+    if (endIdx < 0)
+    {
+        return String();
+    }
+
+    String skillName = response.substring(nameStart, endIdx);
+    skillName.trim();
+    return skillName;
+}
+
+// --------------------------------------------------------------------
+// chatV3 – two-phase progressive loading with tool-call loop
+// --------------------------------------------------------------------
+
 String OpenAILLM::chatV3(const char *user_message,
                          ToolHandler toolHandler,
                          uint8_t maxIterations)
@@ -490,7 +521,7 @@ String OpenAILLM::chatV3(const char *user_message,
     const char *prevPrompt = m_system_prompt;
     static String combinedPrompt;
 
-    // Build combined prompt: TOOL_PROMPT + skill system prompt + original prompt
+    // Build combined prompt: TOOL_PROMPT + skill summary prompt + original prompt
     combinedPrompt = TOOL_PROMPT;
 
     if (m_skill_registry)
@@ -509,10 +540,51 @@ String OpenAILLM::chatV3(const char *user_message,
 
     m_system_prompt = combinedPrompt.c_str();
 
-    // First LLM call
+    // ================================================================
+    // Phase 1: First LLM call (with summary-only skill prompt)
+    // ================================================================
     String reply = chatV2(user_message);
 
-    // Tool-call loop
+    // ================================================================
+    // Phase 2: Detect [SKILL_REQUEST:xxx] and inject detail
+    // ================================================================
+    if (reply.length() > 0 && m_skill_registry)
+    {
+        String requestedSkill = parseSkillRequest(reply);
+        if (requestedSkill.length() > 0)
+        {
+            Serial.printf("OpenAILLM::chatV3: detected SKILL_REQUEST for \"%s\"\n",
+                          requestedSkill.c_str());
+
+            String detail = m_skill_registry->generateDetailForSkill(requestedSkill);
+            if (detail.length() > 0)
+            {
+                Serial.printf("OpenAILLM::chatV3: injecting detail for skill \"%s\" (%d bytes)\n",
+                              requestedSkill.c_str(), detail.length());
+
+                // Inject skill detail as a system message into history,
+                // then ask the LLM to produce the actual SKILL command.
+                appendHistoryMessage("system", detail);
+
+                String phase2Prompt = "請根據以上提供的技能「" + requestedSkill
+                    + "」的詳細資訊，直接生成對應的 [SKILL:...] 命令來完成使用者的請求。";
+                reply = chatV2(phase2Prompt.c_str());
+
+                Serial.printf("OpenAILLM::chatV3: phase-2 reply length = %d\n",
+                              reply.length());
+            }
+            else
+            {
+                Serial.printf("OpenAILLM::chatV3: WARNING - no detail found for skill \"%s\", "
+                              "returning phase-1 result as-is\n",
+                              requestedSkill.c_str());
+            }
+        }
+    }
+
+    // ================================================================
+    // Tool-call / skill-execution loop (operates on final reply)
+    // ================================================================
     for (uint8_t iter = 0; iter < maxIterations && reply.length() > 0; ++iter)
     {
         // 1) Check for skill commands first

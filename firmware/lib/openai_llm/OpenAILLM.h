@@ -31,6 +31,13 @@ private:
     void appendHistoryMessage(const char *role, const String &content);
     String sendChatRequest(const String &request_body);
 
+    /**
+     * Parse a [SKILL_REQUEST:xxx] tag from LLM response.
+     * @param response  The LLM reply text.
+     * @return The skill name if found, or empty String if not.
+     */
+    String parseSkillRequest(const String &response);
+
 public:
     /**
      * @param api_key        Your OpenAI API key (Bearer token).

@@ -74,9 +74,34 @@ public:
     /**
      * Generate the full system-prompt section that describes the
      * skill system to the LLM, including command format and all
-     * skill details.
+     * skill details (now uses summary-only for progressive loading).
      */
     String generateSystemPrompt() const;
+
+    /**
+     * Generate a summary-only system prompt listing available skills.
+     * Used in the first stage of two-phase progressive loading.
+     * The LLM can reply with [SKILL_REQUEST:name] to request detail.
+     */
+    String generateSummaryPrompt() const;
+
+    /**
+     * Get full detail for a single skill by name.
+     * Used in the second stage when the LLM requests detail via
+     * [SKILL_REQUEST:name].
+     *
+     * @param skillName  The skill name to look up.
+     * @return Detail string with guidance prefix, or empty if not found.
+     */
+    String generateDetailForSkill(const String &skillName) const;
+
+    /**
+     * Find a Skill object by name (internal helper).
+     *
+     * @param skillName  The skill name to look up.
+     * @return Pointer to the matching Skill, or nullptr if not found.
+     */
+    Skill *findSkillByName(const String &skillName) const;
 
     // ---- Execution ----
 

@@ -141,26 +141,54 @@ String SkillRegistry::getAllSummaries() const
 
 String SkillRegistry::generateSystemPrompt() const
 {
+    // Delegate to summary-only prompt for progressive loading
+    return generateSummaryPrompt();
+}
+
+String SkillRegistry::generateSummaryPrompt() const
+{
     if (m_skills.empty()) return String();
 
     String prompt;
-    prompt += "你可以控制裝置上的硬體功能。可用的技能如下：\n\n";
+    prompt += "你有以下技能可以使用。當使用者的請求需要使用某個技能時，";
+    prompt += "請回覆 [SKILL_REQUEST:技能名稱] 來啟動該技能。\n\n";
+    prompt += "可用技能：\n";
 
-    // Detailed skill descriptions
     for (const auto *s : m_skills)
     {
-        prompt += s->generateDetail();
-        prompt += "\n";
+        prompt += s->generateSummary();
     }
 
-    prompt += "### 使用方式\n";
+    prompt += "\n如果使用者的請求不需要任何技能，請直接用自然語言回應。\n";
+
+    return prompt;
+}
+
+String SkillRegistry::generateDetailForSkill(const String &skillName) const
+{
+    Skill *skill = findSkillByName(skillName);
+    if (!skill) return String();
+
+    String prompt;
+    prompt += "以下是技能 \"" + skillName + "\" 的詳細定義，";
+    prompt += "請根據使用者的請求產生正確的命令標籤：\n\n";
+    prompt += skill->generateDetail();
+    prompt += "\n### 使用方式\n";
     prompt += "當使用者要求執行硬體操作時，在回覆中加入技能指令標籤。\n";
     prompt += "格式: [SKILL:技能名稱:指令名稱:參數1=值1,參數2=值2]\n";
     prompt += "範例: [SKILL:led_control:set_led:action=on]\n";
     prompt += "你可以在回覆文字中夾帶這個標籤，系統會自動解析並執行。\n";
-    prompt += "執行完成後系統會回傳結果。\n";
 
     return prompt;
+}
+
+Skill *SkillRegistry::findSkillByName(const String &skillName) const
+{
+    for (auto *s : m_skills)
+    {
+        if (s->name == skillName) return s;
+    }
+    return nullptr;
 }
 
 // ---- Execution ----
