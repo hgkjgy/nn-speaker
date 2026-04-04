@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "I2SSampler.h"
 #include "RingBuffer.h"
 #include "RecogniseCommandState.h"
@@ -27,7 +29,7 @@ RecogniseCommandState::RecogniseCommandState(I2SSampler *sample_provider, Indica
 void RecogniseCommandState::enterState()
 {
     // indicate that we are now recording audio
-    m_indicator_light->setState(ON);
+    //m_indicator_light->setState(ON);
     m_speaker->playReady();
 
     // stash the start time - we will limit ourselves to 5 seconds of data
@@ -112,7 +114,7 @@ bool RecogniseCommandState::run()
                 break;
             }
             // indicate that we are done
-            m_indicator_light->setState(OFF);
+            //m_indicator_light->setState(OFF);
             return true;
         }
     }

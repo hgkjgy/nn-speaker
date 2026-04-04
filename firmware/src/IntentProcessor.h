@@ -3,6 +3,7 @@
 
 #include <map>
 #include "WitAiChunkedUploader.h"
+#include "OpenAILLM.h"
 
 class Speaker;
 
@@ -22,9 +23,13 @@ private:
     IntentResult life();
 
     Speaker *m_speaker;
+    OpenAILLM *m_llm;
+
+    /** No-op tool handler for chatV3 (skills are handled internally). */
+    static String noOpToolHandler(const String &reply);
 
 public:
-    IntentProcessor(Speaker *speaker);
+    IntentProcessor(Speaker *speaker, OpenAILLM *llm);
     void addDevice(const std::string &name, int gpio_pin);
     IntentResult processIntent(const Intent &intent);
 };

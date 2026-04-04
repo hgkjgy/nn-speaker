@@ -1,10 +1,20 @@
 #include <Arduino.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "IntentProcessor.h"
 #include "Speaker.h"
 
-IntentProcessor::IntentProcessor(Speaker *speaker)
+IntentProcessor::IntentProcessor(Speaker *speaker, OpenAILLM *llm)
 {
     m_speaker = speaker;
+    m_llm = llm;
+}
+
+String IntentProcessor::noOpToolHandler(const String &reply)
+{
+    // No legacy tool handling needed; skill execution is handled
+    // inside chatV3 via SkillRegistry.
+    return String();
 }
 
 IntentResult IntentProcessor::turnOnDevice(const Intent &intent)
@@ -79,26 +89,26 @@ IntentResult IntentProcessor::processIntent(const Intent &intent)
     }
     Serial.printf("I heard \"%s\"\n", intent.text.c_str());
 
-    const bool has_open_keyword = intent.text.find("開") != std::string::npos;
-    const bool has_close_keyword = intent.text.find("關") != std::string::npos;
-    const bool has_light_keyword = intent.text.find("燈") != std::string::npos;
 
-    if (has_open_keyword && has_light_keyword)
+    if (!m_llm)
     {
-        Serial.printf("Turning on the light\n");
-        m_speaker->playLightOn();
-        return SILENT_SUCCESS;
+        Serial.println("IntentProcessor: LLM not available");
+        return FAILED;
     }
 
-    if (has_close_keyword && has_light_keyword)
+    // Delegate intent processing to the LLM (with skill system support)
+    unsigned long startTime = millis();
+    String reply = m_llm->chatV3(intent.text.c_str(), noOpToolHandler, 5);
+    unsigned long elapsed = millis() - startTime;
+
+    if (reply.length() == 0)
     {
-        Serial.printf("Turning off the light\n");
-        
-        m_speaker->playLightOff();
-        return SILENT_SUCCESS;
+        Serial.println("IntentProcessor: LLM returned empty response");
+        return FAILED;
     }
 
-    return FAILED;
+    Serial.printf("IntentProcessor: LLM replied (%lu ms): %s\n", elapsed, reply.c_str());
+    return SUCCESS;
 }
 
 void IntentProcessor::addDevice(const std::string &name, int gpio_pin)
@@ -106,3 +116,4 @@ void IntentProcessor::addDevice(const std::string &name, int gpio_pin)
     m_device_to_pin.insert(std::make_pair(name, gpio_pin));
     pinMode(gpio_pin, OUTPUT);
 }
+

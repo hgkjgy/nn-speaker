@@ -3,6 +3,9 @@
 
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <esp_heap_caps.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // Read timeout while waiting for server response (milliseconds).
 #define READ_TIMEOUT_MS 30000
