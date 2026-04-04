@@ -2,6 +2,7 @@
 #define _intent_processor_h_
 
 #include <map>
+#include <string>
 #include "WitAiChunkedUploader.h"
 #include "OpenAILLM.h"
 
@@ -31,7 +32,7 @@ private:
 public:
     IntentProcessor(Speaker *speaker, OpenAILLM *llm);
     void addDevice(const std::string &name, int gpio_pin);
-    IntentResult processIntent(const Intent &intent);
+    IntentResult processIntent(const Intent &intent, std::string &responseText);
 };
 
 #endif

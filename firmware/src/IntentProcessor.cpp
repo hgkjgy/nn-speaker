@@ -80,8 +80,10 @@ IntentResult IntentProcessor::life()
     return SILENT_SUCCESS;
 }
 
-IntentResult IntentProcessor::processIntent(const Intent &intent)
+IntentResult IntentProcessor::processIntent(const Intent &intent, std::string &responseText)
 {
+    responseText.clear();
+
     if (intent.text.empty())
     {
         Serial.println("No text recognised");
@@ -108,6 +110,7 @@ IntentResult IntentProcessor::processIntent(const Intent &intent)
     }
 
     Serial.printf("IntentProcessor: LLM replied (%lu ms): %s\n", elapsed, reply.c_str());
+    responseText = reply.c_str();
     return SUCCESS;
 }
 

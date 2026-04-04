@@ -11,6 +11,7 @@
 #include "WitAiChunkedUploader.h"
 #include "../config.h"
 #include <string.h>
+#include <string>
 
 #define WINDOW_SIZE 320
 #define STEP_SIZE 160
@@ -100,11 +101,25 @@ bool RecogniseCommandState::run()
             Serial.println("3 seconds has elapsed - finishing recognition request");
             // final new line to finish off the request
             Intent intent = m_speech_recogniser->getResults();
-            IntentResult intentResult = m_intent_processor->processIntent(intent);
+            std::string llmResponseText;
+            IntentResult intentResult = m_intent_processor->processIntent(intent, llmResponseText);
             switch (intentResult)
             {
             case SUCCESS:
-                m_speaker->playOK();
+                if (!llmResponseText.empty())
+                {
+                    Serial.printf("RecogniseCommandState: playing TTS for response (%d chars)\n",
+                                  (int)llmResponseText.size());
+                    if (!m_speaker->playTTS(llmResponseText.c_str()))
+                    {
+                        // TTS failed, fall back to OK sound
+                        m_speaker->playOK();
+                    }
+                }
+                else
+                {
+                    m_speaker->playOK();
+                }
                 break;
             case FAILED:
                 m_speaker->playCantDo();
