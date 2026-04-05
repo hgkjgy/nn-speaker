@@ -37,6 +37,9 @@ public:
      * @return true on success, false on failure.
      */
     bool playTTS(const char *text);
+
+    /** Access the underlying OpenAITTS instance. */
+    OpenAITTS *tts() { return m_tts; }
 };
 
 #endif

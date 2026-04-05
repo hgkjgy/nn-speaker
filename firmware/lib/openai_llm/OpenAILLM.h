@@ -19,6 +19,7 @@ class OpenAILLM
 private:
     static const uint8_t MAX_STORED_MESSAGES = 12;
 
+    String m_api_key_storage;
     const char *m_api_key;
     const char *m_model;          // e.g. "gpt-4o-mini"
     const char *m_system_prompt;  // optional system prompt
@@ -56,6 +57,9 @@ public:
 
     /** Set or change the model. */
     void setModel(const char *model) { m_model = model; }
+
+    /** Set or change the API key (stores an owned copy). */
+    void setApiKey(const char *key) { m_api_key_storage = key; m_api_key = m_api_key_storage.c_str(); }
 
     /** Clear conversation history (keeps current system prompt). */
     void clearHistory();

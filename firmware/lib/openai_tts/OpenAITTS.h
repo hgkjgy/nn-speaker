@@ -1,6 +1,8 @@
 #ifndef __openai_tts_h__
 #define __openai_tts_h__
 
+#include <Arduino.h>
+
 class TTSBufferSource;
 
 /**
@@ -13,6 +15,7 @@ class TTSBufferSource;
 class OpenAITTS
 {
 private:
+    String m_api_key_storage;
     const char *m_api_key;
     const char *m_model;  // e.g. "tts-1"
     const char *m_voice;  // e.g. "alloy", "echo", "fable", "onyx", "nova", "shimmer"
@@ -38,6 +41,9 @@ public:
      *         by this OpenAITTS instance and reused on the next call.
      */
     TTSBufferSource *synthesize(const char *text);
+
+    /** Set or change the API key (stores an owned copy). */
+    void setApiKey(const char *key) { m_api_key_storage = key; m_api_key = m_api_key_storage.c_str(); }
 
     /** Access the underlying buffer source (may be empty/finished). */
     TTSBufferSource *bufferSource() { return m_buffer_source; }
