@@ -1,6 +1,6 @@
 // WiFi credentials
-#define WIFI_SSID "hsc48"
-#define WIFI_PSWD "04124572"
+#define WIFI_SSID "QQ"
+#define WIFI_PSWD "12345678"
 
 // are you using an I2S microphone - comment this out if you want to use an analog mic and ADC input
 #define USE_I2S_MIC_INPUT
@@ -30,6 +30,6 @@
 #define OPENAI_LLM_MODEL "gpt-4o-mini"
 
 // OpenAI TTS settings
-#define OPENAI_API_KEY "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"
+#define OPENAI_API_KEY "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"
 #define OPENAI_TTS_MODEL "tts-1"
 #define OPENAI_TTS_VOICE "alloy"   // alloy, echo, fable, onyx, nova, shimmer
